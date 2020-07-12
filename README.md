@@ -4,7 +4,7 @@ This webserver contains the web interface for GPS guided navigation. The web int
 this requires the robot run [rosbridge_server](http://wiki.ros.org/rosbridge_server?distro=melodic).
 The interface uses Google Map javascript to display the robot and get geolocation of the waypoints.
 
-Open ![mars.html](https://raw.githubusercontent.com/asilan/MARS_webserver/master/mars.html) in a web browser will give you the following interface
+Open [mars.html](https://raw.githubusercontent.com/asilan/MARS_webserver/master/mars.html) in a web browser will give you the following interface
 
 ![web_interface](https://raw.githubusercontent.com/asilan/MARS_webserver/master/web_interface.png)
 
