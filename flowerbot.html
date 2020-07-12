@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Navigation control pannel</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+        .grid-container {
+            display: grid;
+            grid-template-columns: 60% 40%;
+            background-color: rgba(255, 255, 255, 0);
+            padding: 10px;
+            grid-column-gap: 0px;
+            height: 100%;
+            
+        }
+
+        .grid-item {
+            background-color: rgba(255, 255, 255, 0);
+            border: 0px solid rgba(0, 0, 0, 0);
+            padding: 0px;
+            font-size: 30px;
+            text-align: left;
+            height: 90%;
+            width: 100%;
+            min-width: 300px;
+        }
+
+        label {
+            cursor: default;
+            font: 14px arial;
+            width: 100px;
+            display: inline-block;
+        }
+
+        button {
+            cursor: default;
+            font: 14px arial;
+            width: 120px;
+            height: 30px;
+            display: inline-block;
+        }
+
+        /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+
+        #map {
+            height: 85%;
+            width: 95%;
+        }
+
+        /* Optional: Makes the sample page fill the window. */
+
+        html,
+        body {
+            height: 100%;
+            margin: 10;
+            padding: 10;
+            min-width: 600px;
+        }
+
+        thead,
+        tfoot {
+            background-color: #cacaca;
+            color: rgb(0, 0, 0);
+        }
+
+        tbody {
+            background-color: #ffffff;
+        }
+
+        caption {
+            padding: 10px;
+            caption-side: bottom;
+        }
+
+        table {
+            border-collapse: collapse;
+            border: 2px solid rgb(200, 200, 200);
+            letter-spacing: 1px;
+            font-family: arial;
+            ;
+            font-size: 14px;
+            width: 310px;
+            min-width: 310px;
+        }
+
+        td,
+        th {
+            border: 1px solid rgb(190, 190, 190);
+            padding: 5px 10px;
+            text-align: center;
+        }
+
+        td {
+            text-align: center;
+            /* background-color: #ffffff; */
+        }
+
+        .selected {
+            background-color: #1f854a;
+            color: rgb(0, 0, 0);
+        }
+
+        .unselected {
+            background-color: #ffffff;
+            color: rgb(0, 0, 0);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="grid-container">
+        <div id="map" class="grid-item"></div>
+        <div id="control" class="grid-item">
+            <label for="robotAddress">ROS Address</label>
+            <input type="text" name="address" size="20" height="48" id="robotAddress">
+            <br>
+            <button type="button" name="connect" id="connectButton" value="Connect"
+                onclick="connectRobot();">Connect</button>
+            <br>
+            <label for="latitude">Latitude</label>
+            <input type="number" name="x" size="20" height="48" id="latitude" value="">
+            <br>
+            <label for="longitude">Longitude</label>
+            <input type="number" name="y" size="20" height="48" id="longitude" value="">
+            <br>
+            <button type="button" name="connect" id="sendButton" value="send" onclick="sendGoal();">Send goal</button>
+            <button type="button" name="cancel" id="cancelButton" value="cancel" onclick="cancelGoal();">Cancel
+                goal</button>
+            <br>
+            <label for="robotAddress">Waypoints</label>
+            <br>
+            <table id="goal_table" style="cursor: pointer;">
+                <thead>
+                    <tr>
+                        <th scope="id">ID</th>
+                        <th scope="latitude">Latitude</th>
+                        <th scope="longitude">Longitude</th>
+                    </tr>
+                </thead>
+            </table>
+            <button type="button" name="move_up" id="moveUp" value="move_up" onclick="moveUp();">Move Up</button>
+            <button type="button" name="move_down" id="moveDown" value="move_down" onclick="moveDown();">Move
+                down</button>
+            <br>
+            <button type="button" name="add" id="addGoal" value="add" onclick="addGoal();">Add goal</button>
+            <button type="button" name="delete" id="deleteGoal" value="delete" onclick="deleteGoal();">Delete
+                goals</button>
+            <br>
+            <button type="button" name="load" id="loadGoal" value="load" onclick="loadGoal();">Load goals</button>
+            <button type="button" name="save" id="saveGoal" value="delete" onclick="saveGoal();">Save
+                goals</button>
+            <br>
+            <button type="button" name="start_navigate" id="startNavigation" value="start_navigate"
+                onclick="startNavigation();">Start navigation</button>
+            <button type="button" name="stop_navigate" id="stopNavigation" value="stop_navigate"
+                onclick="stopNavigation();">Stop navigation</button>
+        </div>
+    </div>
+    <script src="https://static.robotwebtools.org/EventEmitter2/current/eventemitter2.min.js"></script>
+    <script src="roslib.js"></script>
+    <script src="conversion.js"></script>
+
+    <script language="JavaScript" src="https://cdn.datatables.net/1.10.20/js/jquery.js"></script>
+    <script>
+        var iGoal = 0;
+        var ros = null;
+        var moveBaseClient = null;
+        var robotMarker = null;
+        var map, infoWindow, markers = [];
+        var markerLabel = 1;
+        var odometryListener = null;
+        var gpsListener = null;
+        var robotOrientation = 0;
+        var goal = null;
+        var unselectedMarkerIcon = 'icon-map-marker-red.png';
+        var selectedMarkerIcon = 'icon-map-marker-blue.png';
+        var goals = [];
+        var goalPath;
+        let tableRef = document.getElementById("goal_table");
+
+
+        function moveUp() {
+            for (i = 0; i < tableRef.rows.length - 1; i++) {
+                // this is highlighted item
+                if (tableRef.rows[i + 1].bgColor == "#1f854a") {
+                    if (i > 0 && markers[i - 1].getIcon() == unselectedMarkerIcon) {
+                        var m = markers[i];
+                        m.setZIndex(i - 1);
+                        m.setLabel(i.toString());
+                        markers[i] = markers[i - 1];
+                        markers[i].setZIndex(i);
+                        markers[i].setLabel((i + 1).toString());
+                        markers[i - 1] = m;
+                        var g = goals[i];
+                        goals[i] = goals[i - 1];
+                        goals[i - 1] = g;
+                    }
+                }
+            }
+            updateTableMap();
+        }
+
+        function moveDown() {
+            for (i = tableRef.rows.length - 2; i >= 0; i--) {
+                // this is highlighted item
+                if (tableRef.rows[i + 1].bgColor == "#1f854a") {
+                    if (i < tableRef.rows.length - 2 && markers[i + 1].getIcon() == unselectedMarkerIcon) {
+                        var m = markers[i];
+                        m.setZIndex(i + 1);
+                        m.setLabel((i + 2).toString());
+
+                        markers[i] = markers[i + 1];
+                        markers[i].setZIndex(i);
+                        markers[i].setLabel((i + 1).toString());
+                        markers[i + 1] = m;
+                        var g = goals[i];
+                        goals[i] = goals[i + 1];
+                        goals[i + 1] = g;
+                    }
+                }
+            }
+            updateTableMap();
+        }
+
+        function updateTableMap() {
+            //if (markers.length == 0)
+            //    return;
+            var path = goalPath.getPath();
+
+            for (i = 0; i < markers.length; i++) {
+                let row = tableRef.rows[i + 1];
+                row.cells[0].textContent = (i + 1).toString();
+                row.cells[1].textContent = goals[i][0].toFixed(9);
+                row.cells[2].textContent = goals[i][1].toFixed(9);
+                path.setAt(i, markers[i].getPosition());
+                markers[i].setLabel((i + 1).toString());
+                markers[i].setZIndex(i);
+                if (markers[i].getIcon() == selectedMarkerIcon)
+                    row.bgColor = "#1f854a";
+                else
+                    row.bgColor = "white";
+
+            }
+            var le = tableRef.rows.length - 1;
+            for (i = goals.length; i < le; i++) {
+                tableRef.deleteRow(goals.length + 1);
+                if (i >= goals.length)
+                    path.removeAt(goals.length);
+            }
+            markerLabel = markers.length + 1;
+        }
+        function isIp(ip) {
+            var arrIp = ip.split(".");
+            if (arrIp.length !== 4) return false;
+            for (let oct of arrIp) {
+                if (isNaN(oct) || Number(oct) < 0 || Number(oct) > 255)
+                    return false;
+            }
+            return true;
+        }
+        function addRow(latLng) {
+            newRow = tableRef.insertRow(-1);
+            newRow.bgColor = 'white';
+            let idCell = newRow.insertCell(0);
+            let idText = document.createTextNode(markerLabel.toString());
+            idCell.appendChild(idText);
+            let latCell = newRow.insertCell(1);
+            let latext = document.createTextNode(latLng.lat().toFixed(9));
+            latCell.appendChild(latext);
+            let lngCell = newRow.insertCell(2);
+            let lngText = document.createTextNode(latLng.lng().toFixed(9));
+            lngCell.appendChild(lngText);
+
+            newRow.onclick = function () {
+                if (this.bgColor == "white")
+                    highlight(Number(this.cells[0].textContent) - 1);
+                else
+                    unhighlight(Number(this.cells[0].textContent) - 1)
+
+                // console.log(this);
+                // for (i=0; i<this.cells.length; i++)
+                // {
+                //     this.cells[i].bgColor = 'yellow';
+                // }
+                // this.bgColor = 'yellow';
+
+            };
+        }
+
+        function highlight(id) {
+            let row = tableRef.rows[id + 1];
+            row.bgColor = "#1f854a";
+            markers[id].setIcon(selectedMarkerIcon);
+        }
+        function unhighlight(id) {
+            let row = tableRef.rows[id + 1];
+            row.bgColor = "white";
+            markers[id].setIcon(unselectedMarkerIcon);
+        }
+
+        function connectRobot() {
+            var address = document.getElementById("robotAddress").value;
+            if (document.getElementById('connectButton').textContent == 'Connect') {
+                if (isIp(address)) {
+                    ros = new ROSLIB.Ros({
+                        url: 'ws://' + address + ':9090'
+                    });
+
+                    // If there is an error on the backend, an 'error' emit will be emitted.
+                    ros.on('error', function (error) {
+                        console.log(error);
+                    });
+
+
+                    // moveBaseClient = new ROSLIB.ActionClient({
+                    //         ros: ros,
+                    //         serverName: '/move_base',
+                    //         actionName: 'move_base_msgs/MoveBaseAction'
+                    //     });
+
+                    // Find out exactly when we made a connection.
+                    ros.on('connection', function () {
+                        console.log('Connection made!');
+                        odometryListener = new ROSLIB.Topic({
+                            ros: ros,
+                            name: '/odometry/map',
+                            messageType: 'nav_msgs/Odometry'
+                        });
+                        gpsListener = new ROSLIB.Topic({
+                            ros: ros,
+                            name: '/fix',
+                            messageType: 'sensor_msgs/NavSatFix'
+                        });
+
+                        odometryListener.subscribe(function (message) {
+                            //console.log('Received message on ' + odometryListener.name);
+                            var q = message.pose.pose.orientation;
+                            //console.log(q);
+                            var pos = message.pose.pose.position;
+                            robotOrientation = -Math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z)) / Math.PI * 180;
+                            robotOrientation = robotOrientation + 90;
+                        });
+
+                        moveBaseClient = new ROSLIB.ActionClient({
+                            ros: ros,
+                            serverName: '/move_base',
+                            actionName: 'move_base_msgs/MoveBaseAction'
+                        });
+
+                        gpsListener.subscribe(function (message) {
+                            //console.log('Received message on ' + odometryListener.name);
+
+                            if (robotMarker == null) // first time to get robot position
+                            {
+                                robotMarker = new google.maps.Marker({
+                                    position: {
+                                        lat: message.latitude,
+                                        lng: message.longitude
+                                    },
+                                    map: map,
+                                    label: "Robot",
+                                    icon: {
+                                        rotation: robotOrientation,
+                                        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                                        scale: 8,
+                                        fillColor: '#F51948',
+                                        fillOpacity: 80,
+                                        strokeWeight: 0,
+                                        anchor: {
+                                            x: 0,
+                                            y: 4
+                                        },
+                                        labelOrigin: {
+                                            x: 0,
+                                            y: 2
+                                        }
+                                    }
+                                });
+                                map.setCenter({
+                                    lat: message.latitude,
+                                    lng: message.longitude
+                                });
+                            } else {
+                                robotMarker.setPosition({
+                                    lat: message.latitude,
+                                    lng: message.longitude
+                                })
+                                robotMarker.setIcon({
+                                    rotation: robotOrientation,
+                                    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                                    scale: 8,
+                                    fillColor: '#F51948',
+                                    fillOpacity: 80,
+                                    strokeWeight: 0,
+                                    anchor: {
+                                        x: 0,
+                                        y: 4
+                                    },
+                                    labelOrigin: {
+                                        x: 0,
+                                        y: 2
+                                    }
+                                })
+                            }
+
+                        });
+
+                        document.getElementById('connectButton').textContent = 'Disconnect';
+                    });
+
+                    ros.on('close', function () {
+                        if (odometryListener != null)
+                            odometryListener.unsubscribe();
+                        if (gpsListener != null)
+                            gpsListener.unsubscribe();
+                        console.log('Connection closed.');
+                        document.getElementById('connectButton').textContent = 'Connect';
+                    });
+                } else
+                    alert("Robot address is not a valid IP address.");
+            } else {
+                ros.close();
+            }
+
+        }
+
+        function sendGoal() {
+            var lat = document.getElementById('latitude').value;
+            var lng = document.getElementById('longitude').value;
+            if (lat == "") {
+                alert('Easting is not a valid number!');
+                return;
+            } else {
+                if (Number(lat) == NaN) {
+                    alert('Easting is not a valid number!')
+                    return;
+                }
+            }
+            if (lng == "") {
+                alert('Northing is not a valid number!');
+                return;
+            } else {
+                if (Number(lng) == NaN) {
+                    alert('Northing is not a valid number!')
+                    return;
+                }
+            }
+            if (ros != null) {
+                if (robotMarker != null) {
+                    robotLat = robotMarker.getPosition().lat();
+                    robotLng = robotMarker.getPosition().lng();
+                    // [robotX, robotY, zone] = latLng2utm(robotLat, robotLng);
+                    // heading = Math.atan2(goalY - robotY, goalX - robotX);
+                    goal = constructGoal([robotLat, robotLng], [lat, lng]);
+                    // Send the goal to the action server.
+                    // console.log(goal);
+                    goal.send();
+                } else {
+                    alert("Can't get current robot position!");
+                    heading = 0;
+                }
+
+
+            } else
+                alert('Robot is not connected!');
+        }
+
+        function cancelGoal() {
+            if (goal != null) goal.cancel();
+        }
+
+        function addGoal() {
+            if (robotMarker)
+                addMarker(robotMarker.getPosition())
+        }
+
+        function addMarker(latLng) {
+
+            var marker = new google.maps.Marker({
+                position: latLng,
+                map: map,
+                label: markerLabel.toString(),
+                zIndex: markerLabel - 1,
+                clickable: true,
+                draggable: true,
+                icon: unselectedMarkerIcon
+            });
+            addRow(latLng);
+
+            if (!goalPath) {
+                goalPath = new google.maps.Polyline({
+                    strokeColor: '#228B22',
+                    strokeOpacity: 1.0,
+                    strokeWeight: 3
+                });
+                goalPath.setMap(map);
+            }
+            var path = goalPath.getPath();
+            // Because path is an MVCArray, we can simply append a new coordinate
+            // and it will automatically appear.
+            path.push(latLng);
+
+            goals.push([latLng.lat(), latLng.lng()]);
+
+            marker.addListener('click', function () {
+
+                if (this.getIcon() == selectedMarkerIcon) {
+                    unhighlight(this.getZIndex());
+                }
+                else {
+                    highlight(this.getZIndex());
+                }
+            });
+
+            marker.addListener('dragend', function () {
+                markers[this.getZIndex()] = this;
+                goals[this.getZIndex()] = [this.getPosition().lat(), this.getPosition().lng()]
+
+                var path = goalPath.getPath();
+                path.setAt(this.getZIndex(), this.getPosition());
+                tableRef.rows[this.getZIndex() + 1].cells[1].textContent = this.getPosition().lat().toFixed(9);
+                tableRef.rows[this.getZIndex() + 1].cells[2].textContent = this.getPosition().lng().toFixed(9);
+            });
+
+            marker.addListener('drag', function () {
+                markers[marker.getZIndex()] = marker;
+                goals[marker.getZIndex()] = [marker.getPosition().lat(), marker.getPosition().lng()]
+
+                var path = goalPath.getPath();
+                path.setAt(marker.getZIndex(), marker.getPosition());
+                // Because path is an MVCArray, we can simply append a new coordinate
+                // and it will automatically appear.
+            });
+
+
+            markers.push(marker);
+            markerLabel = markerLabel + 1;
+        }
+        function deleteGoal() {
+            for (var i = markers.length - 1; i >= 0; i--) {
+                if (markers[i].getIcon() == selectedMarkerIcon) {
+                    markers[i].setMap(null);
+                    markers.splice(i, 1);
+                    goals.splice(i, 1);
+
+                }
+            }
+            markerLabel = markers.length;
+            updateTableMap();
+        }
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: {
+                    lat: -34.397,
+                    lng: 150.644
+                },
+                zoom: 18,
+                streetViewControl: false
+            });
+
+            var clickEvent = new google.maps.event.addListener(map, 'click', function (event) {
+                // console.log("add one marker." + markerLabel.toString());
+                addMarker(event.latLng);
+                x = event.latLng.lat();
+                y = event.latLng.lng();
+                //[x,y,n]=latLng2utm(x, y);
+                document.getElementById('latitude').value = x.toFixed(9);
+                document.getElementById('longitude').value = y.toFixed(9);
+            });
+
+            // Try HTML5 geolocation.
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function (position) {
+                    var pos = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    map.setCenter(pos);
+                }, function () { });
+            } else {
+                // Browser doesn't support Geolocation
+            }
+        }
+
+        function loadGoal() {
+            var input = document.createElement('input');
+            input.type = 'file';
+
+            input.onchange = e => {
+                // getting a hold of the file reference
+                var file = e.target.files[0];
+                if (file.name.substring(file.name.lastIndexOf(".") + 1, file.name.length) != "txt") {
+                    alert("Unsupported file type.");
+                    return;
+                }
+
+                // setting up the reader
+                var reader = new FileReader();
+                reader.readAsText(file, 'UTF-8');
+
+                // here we tell the reader what to do when it's done reading...
+                reader.onload = readerEvent => {
+                    var content = readerEvent.target.result; // this is the content!
+                    // console.log(content);
+                    goals = [];
+                    clearMarkers();
+                    var lines = content.split("\n");
+                    var goal_lat, goal_lng;
+                    var lat_sum = 0, lng_sum = 0;
+                    lines.forEach(element => {
+                        var g = element.split(",");
+                        goal_lat = parseFloat(g[0]);
+                        goal_lng = parseFloat(g[1]);
+                        if (!isNaN(goal_lat) && !isNaN(goal_lng)) {
+                            addMarker(new google.maps.LatLng({ lat: goal_lat, lng: goal_lng }));
+                            // console.log("goal_lat is "+goal_lat+" , goal_lng is "+goal_lng);
+                        }
+                        lat_sum += goal_lat;
+                        lng_sum += goal_lng;
+                    });
+                    if (goals.length > 0) {
+                        map.setCenter({ 'lat': lat_sum / goals.length, 'lng': lng_sum / goals.length });
+                    }
+                    updateTableMap();
+
+                }
+            }
+            input.click();
+        }
+
+        function clearMarkers() {
+            markerLabel = 1;
+            if (markers.length == 0)
+                return;
+            markers.forEach(element => {
+                element.setMap(null);
+                element = null;
+            });
+            markers = [];
+            goalPath.setMap(null);
+            goalPath = null;
+            // Because path is an MVCArray, we can simply append a new coordinate
+            // and it will automatically appear.
+        }
+        function saveGoal() {
+            var goal_data = '';
+            for (var ig = 0; ig < goals.length; ig++) {
+                goal_data = goal_data + goals[ig][0].toFixed(9) + ',' + goals[ig][1].toFixed(9);
+                if (ig < goals.length - 1)
+                    goal_data = goal_data + "\r\n";
+            }
+            // Create an invisible A element
+            const a = document.createElement("a");
+            a.style.display = "none";
+            document.body.appendChild(a);
+
+            // Set the HREF to a Blob representation of the data to be downloaded
+            a.href = window.URL.createObjectURL(
+                new Blob([goal_data], { type: "text/plain" })
+            );
+            let date = new Date();
+            var filename = "goals_" + date.getFullYear() + '_' + date.getMonth() + '_' + date.getDay() + '_' + date.getHours() + '_' + date.getMinutes() + '_' + date.getSeconds();
+            // Use download attribute to set set desired file name
+            a.setAttribute("download", filename);
+
+            // Trigger the download by simulating click
+            a.click();
+
+            // Cleanup
+            window.URL.revokeObjectURL(a.href);
+            document.body.removeChild(a);
+        }
+
+        function constructGoal(start, goal) {
+            var goal_utm = latLng2utm(goal[0], goal[1]);
+            var start_utm = latLng2utm(start[0], start[1]);
+            heading = Math.atan2(goal_utm[1] - start_utm[1], goal_utm[0] - start_utm[0]);
+            var qw, qx, qy, qz;
+            [qw, qx, qy, qz] = toQuaternion(0, 0, heading);
+
+            rosGoal = new ROSLIB.Goal({
+                actionClient: moveBaseClient,
+                goalMessage: {
+                    target_pose: {
+                        header: {
+                            frame_id: "/utm"
+                        },
+                        pose: {
+                            position: {
+                                x: goal_utm[0],
+                                y: goal_utm[1],
+                                z: 0
+                            },
+                            orientation: {
+                                x: qx,
+                                y: qy,
+                                z: qz,
+                                w: qw
+                            }
+                        }
+                    }
+                }
+            });
+            return rosGoal;
+        }
+
+        function startNavigation() {
+            if (!ros) {
+                alert("Robot has not been connected.");
+                return;
+            }
+            if (goals.length == 0) {
+                alert("No goals are set.");
+                return;
+            }
+            // var start=[0,0];
+            if (robotMarker != null) {
+                robotLat = robotMarker.getPosition().lat();
+                robotLng = robotMarker.getPosition().lng();
+                [robotX, robotY, zone] = latLng2utm(robotLat, robotLng);
+                start = [robotX, robotY];
+            } else {
+                alert("Can't get current robot position!");
+                heading = 0;
+                return;
+            }
+
+            iGoal = 0;
+            // console.log(start);
+            goal = constructGoal(start, goals[iGoal]);
+            iGoal++;
+            goal.on('result', goalResult);
+            // Send the goal to the action server.
+            goal.send();
+        }
+
+        function goalResult(result) {
+            // console.log('Final Result: ');
+            if (iGoal < goals.length) {
+                start = goals[iGoal - 1];
+                goal = constructGoal(start, goals[iGoal]);
+                goal.on('result', goalResult);
+                goal.send();
+                iGoal++;
+            }
+        }
+        function stopNavigation() {
+            if (goal)
+                goal.cancel();
+        }
+
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyATA22kFwMqb65YIc4CTgxigjhe7RRLHaM&callback=initMap"
+        async defer></script>
+
+</body>
+
+</html>
