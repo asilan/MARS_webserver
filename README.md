@@ -1,6 +1,5 @@
 # MARS_webserver
-[webserver](https://github.com/asilan/mars/tree/master/control_module/mars_control/webserver) 
-contains the web interface for GPS guided navigation. The web interface using 
+This webserver contains the web interface for GPS guided navigation. The web interface using 
 [roslibjs](http://wiki.ros.org/roslibjs) to communicate with the ROS running on the robot. Therefore,
 this requires the robot run [rosbridge_server](http://wiki.ros.org/rosbridge_server?distro=melodic).
 The interface uses Google Map javascript to display the robot and get geolocation of the waypoints.
