@@ -613,14 +613,17 @@
                     var lat_sum = 0, lng_sum = 0;
                     lines.forEach(element => {
                         var g = element.split(",");
-                        goal_lat = parseFloat(g[0]);
-                        goal_lng = parseFloat(g[1]);
-                        if (!isNaN(goal_lat) && !isNaN(goal_lng)) {
-                            addMarker(new google.maps.LatLng({ lat: goal_lat, lng: goal_lng }));
-                            // console.log("goal_lat is "+goal_lat+" , goal_lng is "+goal_lng);
+                        if (g.length == 2)
+                        {
+                            goal_lat = parseFloat(g[0]);
+                            goal_lng = parseFloat(g[1]);
+                            if (!isNaN(goal_lat) && !isNaN(goal_lng)) {
+                                addMarker(new google.maps.LatLng({ lat: goal_lat, lng: goal_lng }));
+                                // console.log("goal_lat is "+goal_lat+" , goal_lng is "+goal_lng);
+                            }
+                            lat_sum += goal_lat;
+                            lng_sum += goal_lng;
                         }
-                        lat_sum += goal_lat;
-                        lng_sum += goal_lng;
                     });
                     if (goals.length > 0) {
                         map.setCenter({ 'lat': lat_sum / goals.length, 'lng': lng_sum / goals.length });
