@@ -37,7 +37,7 @@
         button {
             cursor: default;
             font: 14px arial;
-            width: 120px;
+            width: 140px;
             height: 30px;
             display: inline-block;
         }
@@ -115,7 +115,10 @@
         <div id="map" class="grid-item"></div>
         <div id="control" class="grid-item">
             <label for="robotAddress">ROS Address</label>
-            <input type="text" name="address" size="20" height="48" id="robotAddress">
+            <input type="text" name="address" size="20" height="48" id="robotAddress" list="ips">
+                <datalist id="ips">
+                    <option value="127.0.0.1">
+                </datalist>
             <br>
             <button type="button" name="connect" id="connectButton" value="Connect"
                 onclick="connectRobot();">Connect</button>
@@ -153,10 +156,11 @@
             <button type="button" name="save" id="saveGoal" value="delete" onclick="saveGoal();">Save
                 goals</button>
             <br>
-            <button type="button" name="start_navigate" id="startNavigation" value="start_navigate"
-                onclick="startNavigation();">Start navigation</button>
-            <button type="button" name="stop_navigate" id="stopNavigation" value="stop_navigate"
-                onclick="stopNavigation();">Stop navigation</button>
+            <button type="button" name="pause_resume_navigate" id="pauseResumeNavigation" value="pause_resume_navigate"
+            onclick="pauseResumeNavigation();">Pause navigation</button>
+            <button type="button" name="start_stop_navigate" id="startStopNavigation" value="start_stop_navigation"
+                onclick="startStopNavigation();">Start navigation</button>
+
         </div>
     </div>
     <script src="https://static.robotwebtools.org/EventEmitter2/current/eventemitter2.min.js"></script>
@@ -177,10 +181,15 @@
         var goal = null;
         var unselectedMarkerIcon = 'icon-map-marker-red.png';
         var selectedMarkerIcon = 'icon-map-marker-blue.png';
+        var reachedMarkerIcon = 'icon-map-marker-grey.png';
+        var currentMarkerIcon = 'icon-map-marker-current.png';
         var goals = [];
         var goalPath;
         let tableRef = document.getElementById("goal_table");
-
+        let startStopNavigationRef = document.getElementById("startStopNavigation");
+        let pauseResumeNavigationRef = document.getElementById("pauseResumeNavigation");
+        pauseResumeNavigationRef.disabled = true;
+        startStopNavigationRef.disabled = true;
 
         function moveUp() {
             for (i = 0; i < tableRef.rows.length - 1; i++) {
@@ -311,6 +320,7 @@
 
                     // If there is an error on the backend, an 'error' emit will be emitted.
                     ros.on('error', function (error) {
+                        startStopNavigationRef.disabled = true;
                         console.log(error);
                     });
 
@@ -324,6 +334,7 @@
                     // Find out exactly when we made a connection.
                     ros.on('connection', function () {
                         console.log('Connection made!');
+                        startStopNavigationRef.disabled = false
                         odometryListener = new ROSLIB.Topic({
                             ros: ros,
                             name: '/odometry/map',
@@ -418,6 +429,7 @@
                             gpsListener.unsubscribe();
                         console.log('Connection closed.');
                         document.getElementById('connectButton').textContent = 'Connect';
+                        startStopNavigationRef.disabled = true;
                     });
                 } else
                     alert("Robot address is not a valid IP address.");
@@ -613,17 +625,14 @@
                     var lat_sum = 0, lng_sum = 0;
                     lines.forEach(element => {
                         var g = element.split(",");
-                        if (g.length == 2)
-                        {
-                            goal_lat = parseFloat(g[0]);
-                            goal_lng = parseFloat(g[1]);
-                            if (!isNaN(goal_lat) && !isNaN(goal_lng)) {
-                                addMarker(new google.maps.LatLng({ lat: goal_lat, lng: goal_lng }));
-                                // console.log("goal_lat is "+goal_lat+" , goal_lng is "+goal_lng);
-                            }
-                            lat_sum += goal_lat;
-                            lng_sum += goal_lng;
+                        goal_lat = parseFloat(g[0]);
+                        goal_lng = parseFloat(g[1]);
+                        if (!isNaN(goal_lat) && !isNaN(goal_lng)) {
+                            addMarker(new google.maps.LatLng({ lat: goal_lat, lng: goal_lng }));
+                            // console.log("goal_lat is "+goal_lat+" , goal_lng is "+goal_lng);
                         }
+                        lat_sum += goal_lat;
+                        lng_sum += goal_lng;
                     });
                     if (goals.length > 0) {
                         map.setCenter({ 'lat': lat_sum / goals.length, 'lng': lng_sum / goals.length });
@@ -679,6 +688,7 @@
         }
 
         function constructGoal(start, goal) {
+            console.log("current goal is " + goal);
             var goal_utm = latLng2utm(goal[0], goal[1]);
             var start_utm = latLng2utm(start[0], start[1]);
             heading = Math.atan2(goal_utm[1] - start_utm[1], goal_utm[0] - start_utm[0]);
@@ -708,52 +718,122 @@
                     }
                 }
             });
+            console.log(rosGoal);
             return rosGoal;
         }
 
-        function startNavigation() {
-            if (!ros) {
-                alert("Robot has not been connected.");
-                return;
+        function startStopNavigation() {
+            if (startStopNavigationRef.textContent == "Start navigation")
+            {
+                if (!ros || !ros.isConnected) {
+                    alert("Robot has not been connected.");
+                    return;
+                }
+                if (goals.length == 0) {
+                    alert("No goals are set.");
+                    return;
+                }
+                // var start=[0,0];
+                if (robotMarker != null) {
+                    robotLat = robotMarker.getPosition().lat();
+                    robotLng = robotMarker.getPosition().lng();
+                    // [robotX, robotY, zone] = latLng2utm(robotLat, robotLng);
+                    start = [robotLat, robotLng];
+                    // var path = goalPath.getPath();
+                    // path.insertAt(0, robotMarker.getPosition());
+                } else {
+                    alert("Can't get current robot position!");
+                    heading = 0;
+                    return;
+                }
+                resetMarkers()
+                iGoal = 0;
+                // console.log(start);
+                goal = constructGoal(start, goals[iGoal]);
+                markers[iGoal].setIcon(currentMarkerIcon)
+                iGoal++;
+                goal.on('result', goalResult);
+                // Send the goal to the action server.
+                goal.send();
+                startStopNavigationRef.textContent = "Stop navigation"
+                pauseResumeNavigationRef.disabled = false
             }
-            if (goals.length == 0) {
-                alert("No goals are set.");
-                return;
+            else
+            {
+                if (goal)
+                {
+                    goal.cancel();
+                    iGoal = 0;
+                    // resetMarkers()
+                    startStopNavigationRef.textContent = "Start navigation"
+                    pauseResumeNavigationRef.disabled = true
+                }
             }
-            // var start=[0,0];
-            if (robotMarker != null) {
-                robotLat = robotMarker.getPosition().lat();
-                robotLng = robotMarker.getPosition().lng();
-                [robotX, robotY, zone] = latLng2utm(robotLat, robotLng);
-                start = [robotX, robotY];
-            } else {
-                alert("Can't get current robot position!");
-                heading = 0;
-                return;
-            }
+        }
 
-            iGoal = 0;
-            // console.log(start);
-            goal = constructGoal(start, goals[iGoal]);
-            iGoal++;
-            goal.on('result', goalResult);
-            // Send the goal to the action server.
-            goal.send();
+        function resetMarkers() {
+            markers.forEach(element => {
+                element.setIcon(unselectedMarkerIcon);
+            });
         }
 
         function goalResult(result) {
-            // console.log('Final Result: ');
-            if (iGoal < goals.length) {
-                start = goals[iGoal - 1];
-                goal = constructGoal(start, goals[iGoal]);
-                goal.on('result', goalResult);
-                goal.send();
-                iGoal++;
+            //sconsole.log('Final Result: ');
+            if (goal.status.status == 3)
+            {
+                if (iGoal < goals.length) {
+                    markers[iGoal-1].setIcon(reachedMarkerIcon);
+                    start = goals[iGoal - 1];
+                    goal = constructGoal(start, goals[iGoal]);
+                    goal.on('result', goalResult);
+                    goal.send();
+                    markers[iGoal].setIcon(currentMarkerIcon)
+                    iGoal++;
+                }
+                else if (iGoal == goals.length)
+                {
+                    resetMarkers();
+                    startStopNavigationRef.textContent = "Start navigation"
+                    pauseResumeNavigationRef.disabled = true 
+                    alert("Navigation is finished.");
+                }
             }
         }
-        function stopNavigation() {
-            if (goal)
-                goal.cancel();
+        function pauseResumeNavigation() {
+            if (pauseResumeNavigationRef.textContent == "Resume navigation")
+            {
+                if (startStopNavigationRef.textContent == "Start navigation")
+                {
+                    alert("Navigation has not started.");
+                    return
+                }
+                if (!ros) {
+                    alert("Robot has not been connected.");
+                    return;
+                }
+                if (goals.length == 0) {
+                    alert("No goals are set.");
+                    return;
+                }
+                if (iGoal > 0) iGoal--;
+                goal = constructGoal(start, goals[iGoal]);
+                iGoal++;
+                goal.on('result', goalResult);
+                // Send the goal to the action server.
+                goal.send();
+                pauseResumeNavigationRef.textContent = "Pause navigation"
+            }
+            else
+            {
+                if (startStopNavigationRef.textContent == "Start navigation")
+                {
+                    alert("Navigation has not started.");
+                    return
+                }
+                if (goal)
+                    goal.cancel();
+                pauseResumeNavigationRef.textContent = "Resume navigation"
+            }
         }
 
     </script>
