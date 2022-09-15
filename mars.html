@@ -8,9 +8,9 @@
     <style>
         .grid-container {
             display: grid;
-            grid-template-columns: 60% 40%;
+            grid-template-columns: 100%;
             background-color: rgba(255, 255, 255, 0);
-            padding: 10px;
+            padding: 5px;
             grid-column-gap: 0px;
             height: 100%;
             
@@ -22,9 +22,10 @@
             padding: 0px;
             font-size: 30px;
             text-align: left;
-            height: 90%;
+            height: 100%;
             width: 100%;
             min-width: 300px;
+            
         }
 
         label {
@@ -46,8 +47,9 @@
        * element that contains the map. */
 
         #map {
-            height: 85%;
-            width: 95%;
+            height: 100%;
+            width: 100%;
+            min-height: 400px;
         }
 
         /* Optional: Makes the sample page fill the window. */
@@ -55,9 +57,9 @@
         html,
         body {
             height: 100%;
-            margin: 10;
-            padding: 10;
-            min-width: 600px;
+            margin: 5;
+            padding: 5;
+            /* min-width: 500px; */
         }
 
         thead,
@@ -89,7 +91,7 @@
         td,
         th {
             border: 1px solid rgb(190, 190, 190);
-            padding: 5px 10px;
+            padding: 5px 5px;
             text-align: center;
         }
 
@@ -115,26 +117,16 @@
         <div id="map" class="grid-item"></div>
         <div id="control" class="grid-item">
             <label for="robotAddress">ROS Address</label>
-            <input type="text" name="address" size="20" height="48" id="robotAddress" list="ips">
+            <input type="text" name="address" size="15" height="48" id="robotAddress" list="ips">
                 <datalist id="ips">
                     <option value="127.0.0.1">
                 </datalist>
-            <br>
             <button type="button" name="connect" id="connectButton" value="Connect"
                 onclick="connectRobot();">Connect</button>
             <br>
-            <label for="latitude">Latitude</label>
-            <input type="number" name="x" size="20" height="48" id="latitude" value="">
-            <br>
-            <label for="longitude">Longitude</label>
-            <input type="number" name="y" size="20" height="48" id="longitude" value="">
-            <br>
-            <button type="button" name="connect" id="sendButton" value="send" onclick="sendGoal();">Send goal</button>
-            <button type="button" name="cancel" id="cancelButton" value="cancel" onclick="cancelGoal();">Cancel
-                goal</button>
-            <br>
             <label for="robotAddress">Waypoints</label>
             <br>
+            <div style="height:200px;overflow:auto;">
             <table id="goal_table" style="cursor: pointer;">
                 <thead>
                     <tr>
@@ -144,6 +136,8 @@
                     </tr>
                 </thead>
             </table>
+            </div>
+            <br>
             <button type="button" name="move_up" id="moveUp" value="move_up" onclick="moveUp();">Move Up</button>
             <button type="button" name="move_down" id="moveDown" value="move_down" onclick="moveDown();">Move
                 down</button>
@@ -160,7 +154,6 @@
             onclick="pauseResumeNavigation();">Pause navigation</button>
             <button type="button" name="start_stop_navigate" id="startStopNavigation" value="start_stop_navigation"
                 onclick="startStopNavigation();">Start navigation</button>
-
         </div>
     </div>
     <script src="https://static.robotwebtools.org/EventEmitter2/current/eventemitter2.min.js"></script>
@@ -437,51 +430,6 @@
                 ros.close();
             }
 
-        }
-
-        function sendGoal() {
-            var lat = document.getElementById('latitude').value;
-            var lng = document.getElementById('longitude').value;
-            if (lat == "") {
-                alert('Easting is not a valid number!');
-                return;
-            } else {
-                if (Number(lat) == NaN) {
-                    alert('Easting is not a valid number!')
-                    return;
-                }
-            }
-            if (lng == "") {
-                alert('Northing is not a valid number!');
-                return;
-            } else {
-                if (Number(lng) == NaN) {
-                    alert('Northing is not a valid number!')
-                    return;
-                }
-            }
-            if (ros != null) {
-                if (robotMarker != null) {
-                    robotLat = robotMarker.getPosition().lat();
-                    robotLng = robotMarker.getPosition().lng();
-                    // [robotX, robotY, zone] = latLng2utm(robotLat, robotLng);
-                    // heading = Math.atan2(goalY - robotY, goalX - robotX);
-                    goal = constructGoal([robotLat, robotLng], [lat, lng]);
-                    // Send the goal to the action server.
-                    // console.log(goal);
-                    goal.send();
-                } else {
-                    alert("Can't get current robot position!");
-                    heading = 0;
-                }
-
-
-            } else
-                alert('Robot is not connected!');
-        }
-
-        function cancelGoal() {
-            if (goal != null) goal.cancel();
         }
 
         function addGoal() {
